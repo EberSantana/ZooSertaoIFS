@@ -1,20 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, RotateCcw, Shuffle } from 'lucide-react';
+import { CheckCircle2, Plus, RotateCcw, Shuffle } from 'lucide-react';
 import { FLASHCARDS_PPC, type FlashcardItem } from '../data/studyContent';
 import type { Rating, StudentProgress } from '../utils/gamification';
 
 interface FlashcardsViewProps {
   progress: StudentProgress;
+  customFlashcards?: FlashcardItem[];
   initialYearFilter?: 1 | 2 | 3 | 'Todos';
   initialDisciplineFilter?: string;
   onRateCard: (cardId: string, rating: Rating) => number;
+  onCreateFlashcard?: () => void;
 }
 
 export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   progress,
+  customFlashcards = [],
   initialYearFilter = 'Todos',
   initialDisciplineFilter = 'Todas',
   onRateCard,
+  onCreateFlashcard,
 }) => {
   const [yearFilter, setYearFilter] = useState<1 | 2 | 3 | 'Todos'>(initialYearFilter);
   const [disciplineFilter, setDisciplineFilter] = useState<string>(initialDisciplineFilter);
@@ -24,6 +28,11 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const [sessionXp, setSessionXp] = useState(0);
   const [shuffleSeed, setShuffleSeed] = useState(0);
   const [lastFeedback, setLastFeedback] = useState<string | null>(null);
+
+  const allFlashcards = useMemo(
+    () => [...customFlashcards, ...FLASHCARDS_PPC],
+    [customFlashcards]
+  );
 
   useEffect(() => {
     setYearFilter(initialYearFilter);
@@ -36,14 +45,14 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const availableDisciplines = useMemo(() => {
     const base =
       yearFilter === 'Todos'
-        ? FLASHCARDS_PPC
-        : FLASHCARDS_PPC.filter((c) => c.ano === yearFilter);
+        ? allFlashcards
+        : allFlashcards.filter((c) => c.ano === yearFilter);
     const names = Array.from(new Set(base.map((c) => c.disciplinaNome)));
     return names.sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [yearFilter]);
+  }, [yearFilter, allFlashcards]);
 
   const deck = useMemo(() => {
-    const filtered = FLASHCARDS_PPC.filter((c) => {
+    const filtered = allFlashcards.filter((c) => {
       const matchYear = yearFilter === 'Todos' || c.ano === yearFilter;
       const matchDisc = disciplineFilter === 'Todas' || c.disciplinaNome === disciplineFilter;
       return matchYear && matchDisc;
@@ -55,7 +64,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     return copy;
-  }, [yearFilter, disciplineFilter, shuffleSeed]);
+  }, [allFlashcards, yearFilter, disciplineFilter, shuffleSeed]);
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -91,7 +100,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-[#525B50]">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-[#525B50]">
           <span>
             Revisadas na sessão:{' '}
             <strong className="font-mono tabular-nums text-[#1A241B]">{sessionReviewed}</strong>
@@ -101,6 +110,16 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             Ganho:{' '}
             <strong className="font-mono tabular-nums text-[#157A42]">+{sessionXp} XP</strong>
           </span>
+          {onCreateFlashcard && (
+            <button
+              type="button"
+              onClick={onCreateFlashcard}
+              className="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-lg bg-[#EAF6EE] hover:bg-[#D5EEDF] text-xs font-semibold text-[#106134] cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Novo Flashcard</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -139,7 +158,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             onChange={(e) => setDisciplineFilter(e.target.value)}
             className="min-h-[40px] px-3 py-2 rounded-xl border border-[#DCE2D7] bg-white text-sm text-[#1A241B] focus-visible:outline-2 focus-visible:outline-[#157A42]"
           >
-            <option value="Todas">Todas as disciplinas ({FLASHCARDS_PPC.length})</option>
+            <option value="Todas">Todas as disciplinas ({allFlashcards.length})</option>
             {availableDisciplines.map((name) => (
               <option key={name} value={name}>
                 {name}

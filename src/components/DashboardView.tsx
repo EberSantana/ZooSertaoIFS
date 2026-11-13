@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckCircle2,
   Flame,
+  FolderPlus,
   Gamepad2,
   Layers,
   MapPin,
@@ -18,6 +19,7 @@ import {
   PLANTEL_POCO_REDONDO,
 } from '../data/ppcData';
 import { FLASHCARDS_PPC, QUIZ_QUESTIONS } from '../data/studyContent';
+import type { CustomContentState } from '../utils/customContentStore';
 import {
   BADGE_CATALOG,
   calculateLevel,
@@ -27,26 +29,30 @@ import type { AppTab } from './TopNav';
 
 interface DashboardViewProps {
   progress: StudentProgress;
+  customContent: CustomContentState;
   onNavigate: (tab: AppTab, yearFilter?: 1 | 2 | 3) => void;
   onResetProgress: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   progress,
+  customContent,
   onNavigate,
   onResetProgress,
 }) => {
   const levelInfo = calculateLevel(progress.xp);
+  const allFlashcards = [...customContent.flashcards, ...FLASHCARDS_PPC];
+  const allQuizQuestions = [...customContent.quizQuestions, ...QUIZ_QUESTIONS];
   const masteredCount = Object.values(progress.cardProgress).filter((c) => c.mastered).length;
 
   const yearStats = ([1, 2, 3] as const).map((ano) => {
     const discs = DISCIPLINAS_PPC.filter((d) => d.ano === ano);
     const totalHoras = discs.reduce((acc, d) => acc + d.cargaHoraria, 0);
-    const cardsTotal = FLASHCARDS_PPC.filter((c) => c.ano === ano).length;
-    const cardsMastered = FLASHCARDS_PPC.filter(
+    const cardsTotal = allFlashcards.filter((c) => c.ano === ano).length;
+    const cardsMastered = allFlashcards.filter(
       (c) => c.ano === ano && progress.cardProgress[c.id]?.mastered
     ).length;
-    const quizTotal = QUIZ_QUESTIONS.filter((q) => q.ano === ano).length;
+    const quizTotal = allQuizQuestions.filter((q) => q.ano === ano).length;
     return {
       ano,
       disciplinasCount: discs.length,
@@ -99,6 +105,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <Gamepad2 className="w-4 h-4 text-[#B86A0A]" aria-hidden="true" />
               <span>Jogos Lúdicos</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('criar')}
+              className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl border border-[#DCE2D7] hover:bg-[#F7F8F5] text-[#1A241B] text-sm font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <FolderPlus className="w-4 h-4 text-[#157A42]" aria-hidden="true" />
+              <span>Inserir Assunto / Upload</span>
             </button>
           </div>
         </div>
@@ -162,7 +176,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span>Cards dominados</span>
               </dt>
               <dd className="mt-1 font-mono tabular-nums text-lg font-bold text-[#1A241B]">
-                {masteredCount} / {FLASHCARDS_PPC.length}
+                {masteredCount} / {allFlashcards.length}
               </dd>
             </div>
             <div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, CheckSquare, Compass, Gamepad2, Layers } from 'lucide-react';
+import { BookOpen, CheckSquare, Compass, FolderPlus, Gamepad2, Layers } from 'lucide-react';
 import type { AppTab } from './TopNav';
 
 interface MobileBottomNavProps {
@@ -17,6 +17,7 @@ const MOBILE_TABS: Array<{
   { id: 'quiz', label: 'Quiz', icon: CheckSquare },
   { id: 'ludico', label: 'Lúdico', icon: Gamepad2 },
   { id: 'ppc', label: 'Matriz', icon: BookOpen },
+  { id: 'criar', label: 'Criar', icon: FolderPlus },
 ];
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -28,7 +29,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       aria-label="Navegação inferior móvel"
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-[#E3E7DF] pb-safe"
     >
-      <div className="grid grid-cols-5 h-16 items-center">
+      <div className="grid grid-cols-6 h-16 items-center">
         {MOBILE_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

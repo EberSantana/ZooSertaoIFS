@@ -5,6 +5,7 @@ import {
   Flame,
   Gamepad2,
   Link2,
+  Plus,
   RotateCcw,
   SlidersHorizontal,
   Sun,
@@ -16,11 +17,15 @@ import {
   MATCH_DECKS,
   RATION_SCENARIOS,
   type ClassifierItem,
+  type MatchDeck,
 } from '../data/studyContent';
 import { evaluateRationScenario, type RationEvaluation } from '../utils/gamification';
 
 interface LudicHubViewProps {
+  customMatchDecks?: MatchDeck[];
+  customClassifierItems?: ClassifierItem[];
   onAwardLudicXp: (xp: number, maxCombo: number) => void;
+  onCreateLudic?: () => void;
 }
 
 type LudicMode = 'conexao' | 'curralinho' | 'classificador';
@@ -32,7 +37,12 @@ const CAMPUS_CATEGORIES: ClassifierItem['categoriaCorreta'][] = [
   'Gestão & Extensão',
 ];
 
-export const LudicHubView: React.FC<LudicHubViewProps> = ({ onAwardLudicXp }) => {
+export const LudicHubView: React.FC<LudicHubViewProps> = ({
+  customMatchDecks = [],
+  customClassifierItems = [],
+  onAwardLudicXp,
+  onCreateLudic,
+}) => {
   const [activeMode, setActiveMode] = useState<LudicMode>('conexao');
 
   return (
@@ -47,58 +57,77 @@ export const LudicHubView: React.FC<LudicHubViewProps> = ({ onAwardLudicXp }) =>
           </p>
         </div>
 
-        {/* Mode Selector Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-[#EAEFE7] rounded-xl self-start md:self-auto overflow-x-auto max-w-full">
-          <button
-            type="button"
-            onClick={() => setActiveMode('conexao')}
-            className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeMode === 'conexao'
-                ? 'bg-white text-[#1A241B] shadow-sm'
-                : 'text-[#525B50] hover:text-[#1A241B]'
-            }`}
-          >
-            <Link2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Conexão Zootécnica</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMode('curralinho')}
-            className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeMode === 'curralinho'
-                ? 'bg-white text-[#1A241B] shadow-sm'
-                : 'text-[#525B50] hover:text-[#1A241B]'
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Desafio do Curralinho</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMode('classificador')}
-            className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              activeMode === 'classificador'
-                ? 'bg-white text-[#1A241B] shadow-sm'
-                : 'text-[#525B50] hover:text-[#1A241B]'
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Classificador do Campus</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Mode Selector Tabs */}
+          <div className="flex items-center gap-1 p-1 bg-[#EAEFE7] rounded-xl overflow-x-auto max-w-full">
+            <button
+              type="button"
+              onClick={() => setActiveMode('conexao')}
+              className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                activeMode === 'conexao'
+                  ? 'bg-white text-[#1A241B] shadow-sm'
+                  : 'text-[#525B50] hover:text-[#1A241B]'
+              }`}
+            >
+              <Link2 className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Conexão Zootécnica</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('curralinho')}
+              className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                activeMode === 'curralinho'
+                  ? 'bg-white text-[#1A241B] shadow-sm'
+                  : 'text-[#525B50] hover:text-[#1A241B]'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Desafio do Curralinho</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('classificador')}
+              className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                activeMode === 'classificador'
+                  ? 'bg-white text-[#1A241B] shadow-sm'
+                  : 'text-[#525B50] hover:text-[#1A241B]'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Classificador do Campus</span>
+            </button>
+          </div>
+
+          {onCreateLudic && (
+            <button
+              type="button"
+              onClick={onCreateLudic}
+              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-xl bg-[#EAF6EE] hover:bg-[#D5EEDF] text-xs font-semibold text-[#106134] cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Nova Atividade</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {activeMode === 'conexao' && <ConexaoGame onAwardXp={onAwardLudicXp} />}
+      {activeMode === 'conexao' && (
+        <ConexaoGame customDecks={customMatchDecks} onAwardXp={onAwardLudicXp} />
+      )}
       {activeMode === 'curralinho' && <CurralinhoSimulator onAwardXp={onAwardLudicXp} />}
-      {activeMode === 'classificador' && <CampusClassifier onAwardXp={onAwardLudicXp} />}
+      {activeMode === 'classificador' && (
+        <CampusClassifier customItems={customClassifierItems} onAwardXp={onAwardLudicXp} />
+      )}
     </div>
   );
 };
 
 // ===================== 1. CONEXÃO ZOOTÉCNICA =====================
-const ConexaoGame: React.FC<{ onAwardXp: (xp: number, combo: number) => void }> = ({
-  onAwardXp,
-}) => {
+const ConexaoGame: React.FC<{
+  customDecks: MatchDeck[];
+  onAwardXp: (xp: number, combo: number) => void;
+}> = ({ customDecks, onAwardXp }) => {
+  const allDecks = useMemo(() => [...MATCH_DECKS, ...customDecks], [customDecks]);
   const [deckIndex, setDeckIndex] = useState(0);
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null);
   const [matchedIds, setMatchedIds] = useState<string[]>([]);
@@ -108,7 +137,8 @@ const ConexaoGame: React.FC<{ onAwardXp: (xp: number, combo: number) => void }> 
   const [bestCombo, setBestCombo] = useState(0);
   const [awarded, setAwarded] = useState(false);
 
-  const deck = MATCH_DECKS[deckIndex];
+  const safeDeckIdx = deckIndex < allDecks.length ? deckIndex : 0;
+  const deck = allDecks[safeDeckIdx];
 
   // Deterministically shuffle concepts per deck so they don't align 1-to-1
   const shuffledConcepts = useMemo(() => {
@@ -171,13 +201,13 @@ const ConexaoGame: React.FC<{ onAwardXp: (xp: number, combo: number) => void }> 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {MATCH_DECKS.map((d, idx) => (
+          {allDecks.map((d, idx) => (
             <button
               key={d.id}
               type="button"
               onClick={() => resetDeck(idx)}
               className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
-                idx === deckIndex
+                idx === safeDeckIdx
                   ? 'border-[#157A42] bg-[#EAF6EE] text-[#106134]'
                   : 'border-[#DCE2D7] bg-white text-[#4C564A] hover:bg-[#F7F8F5]'
               }`}
@@ -228,7 +258,7 @@ const ConexaoGame: React.FC<{ onAwardXp: (xp: number, combo: number) => void }> 
           <div className="pt-2 flex justify-center gap-3">
             <button
               type="button"
-              onClick={() => resetDeck((deckIndex + 1) % MATCH_DECKS.length)}
+              onClick={() => resetDeck((safeDeckIdx + 1) % allDecks.length)}
               className="min-h-[44px] px-5 py-2 rounded-xl bg-[#157A42] hover:bg-[#106134] text-white text-sm font-semibold cursor-pointer"
             >
               Próximo Tema
@@ -578,9 +608,11 @@ const CurralinhoSimulator: React.FC<{ onAwardXp: (xp: number, combo: number) => 
 };
 
 // ===================== 3. CLASSIFICADOR DO CAMPUS =====================
-const CampusClassifier: React.FC<{ onAwardXp: (xp: number, combo: number) => void }> = ({
-  onAwardXp,
-}) => {
+const CampusClassifier: React.FC<{
+  customItems: ClassifierItem[];
+  onAwardXp: (xp: number, combo: number) => void;
+}> = ({ customItems, onAwardXp }) => {
+  const allItems = useMemo(() => [...customItems, ...CLASSIFIER_ITEMS], [customItems]);
   const [index, setIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
@@ -588,7 +620,8 @@ const CampusClassifier: React.FC<{ onAwardXp: (xp: number, combo: number) => voi
   const [feedback, setFeedback] = useState<{ ok: boolean; correta: string } | null>(null);
   const [finished, setFinished] = useState(false);
 
-  const current = CLASSIFIER_ITEMS[index];
+  const safeIdx = index < allItems.length ? index : 0;
+  const current = allItems[safeIdx];
 
   const handleChoose = (category: ClassifierItem['categoriaCorreta']) => {
     if (feedback || finished || !current) return;
@@ -610,8 +643,8 @@ const CampusClassifier: React.FC<{ onAwardXp: (xp: number, combo: number) => voi
     setFeedback({ ok: isOk, correta: current.categoriaCorreta });
     setTimeout(() => {
       setFeedback(null);
-      if (index + 1 < CLASSIFIER_ITEMS.length) {
-        setIndex((i) => i + 1);
+      if (safeIdx + 1 < allItems.length) {
+        setIndex(safeIdx + 1);
       } else {
         setFinished(true);
         onAwardXp(nextScore * 12 + 15, nextMax);
@@ -648,7 +681,7 @@ const CampusClassifier: React.FC<{ onAwardXp: (xp: number, combo: number) => voi
           <h3 className="text-xl font-bold text-[#1A241B]">Classificação Finalizada!</h3>
           <p className="text-sm text-[#4C564A]">
             Você acertou <strong className="font-mono tabular-nums">{score}</strong> de{' '}
-            <strong className="font-mono tabular-nums">{CLASSIFIER_ITEMS.length}</strong> atividades (
+            <strong className="font-mono tabular-nums">{allItems.length}</strong> atividades (
             +{score * 12 + 15} XP).
           </p>
           <button
@@ -663,8 +696,8 @@ const CampusClassifier: React.FC<{ onAwardXp: (xp: number, combo: number) => voi
         <>
           <div className="flex items-center justify-between text-xs text-[#525B50]">
             <span>
-              Item <strong className="font-mono tabular-nums text-[#1A241B]">{index + 1}</strong> de{' '}
-              <strong className="font-mono tabular-nums text-[#1A241B]">{CLASSIFIER_ITEMS.length}</strong>
+              Item <strong className="font-mono tabular-nums text-[#1A241B]">{safeIdx + 1}</strong> de{' '}
+              <strong className="font-mono tabular-nums text-[#1A241B]">{allItems.length}</strong>
             </span>
             <span className="font-mono tabular-nums font-semibold text-[#157A42]">
               Acertos: {score}

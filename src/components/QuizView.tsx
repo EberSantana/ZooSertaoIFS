@@ -1,21 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CheckCircle2, Flame, RotateCcw, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Flame, Plus, RotateCcw, XCircle } from 'lucide-react';
 import { QUIZ_QUESTIONS, type QuizQuestion } from '../data/studyContent';
 import { calculateQuizXp } from '../utils/gamification';
 
 interface QuizViewProps {
+  customQuestions?: QuizQuestion[];
   initialYearFilter?: 1 | 2 | 3 | 'Todos';
   onFinishQuiz: (correctCount: number, totalQuestions: number, maxStreak: number) => {
     xpEarned: number;
     accuracy: number;
   };
+  onCreateQuestion?: () => void;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'] as const;
 
 export const QuizView: React.FC<QuizViewProps> = ({
+  customQuestions = [],
   initialYearFilter = 'Todos',
   onFinishQuiz,
+  onCreateQuestion,
 }) => {
   const [yearFilter, setYearFilter] = useState<1 | 2 | 3 | 'Todos'>(initialYearFilter);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -32,22 +36,23 @@ export const QuizView: React.FC<QuizViewProps> = ({
   }, [initialYearFilter]);
 
   const questions = useMemo<QuizQuestion[]>(() => {
+    const merged = [...customQuestions, ...QUIZ_QUESTIONS];
     const pool =
       yearFilter === 'Todos'
-        ? QUIZ_QUESTIONS
-        : QUIZ_QUESTIONS.filter((q) => q.ano === yearFilter);
+        ? merged
+        : merged.filter((q) => q.ano === yearFilter);
 
-    // Deterministic order by seed so "Refazer" gives fresh variety
+    // Keep custom questions up front on initial round; shuffle all on "Nova Rodada"
     const ordered = [...pool];
     if (attemptSeed > 0) {
       ordered.sort((a, b) => {
-        const ha = (a.id.charCodeAt(2) * 17 + attemptSeed * 13) % 97;
-        const hb = (b.id.charCodeAt(2) * 17 + attemptSeed * 13) % 97;
+        const ha = (a.id.charCodeAt(a.id.length - 1) * 17 + attemptSeed * 13) % 97;
+        const hb = (b.id.charCodeAt(b.id.length - 1) * 17 + attemptSeed * 13) % 97;
         return ha - hb;
       });
     }
-    return ordered.slice(0, 8);
-  }, [yearFilter, attemptSeed]);
+    return ordered.slice(0, Math.max(8, Math.min(12, customQuestions.length + 8)));
+  }, [customQuestions, yearFilter, attemptSeed]);
 
   const restartQuiz = (nextYear?: 1 | 2 | 3 | 'Todos', nextSeed = attemptSeed) => {
     if (nextYear !== undefined) setYearFilter(nextYear);
@@ -103,25 +108,38 @@ export const QuizView: React.FC<QuizViewProps> = ({
           </p>
         </div>
 
-        {/* Year Filter Segmented Control */}
-        <div className="flex items-center gap-1 p-1 bg-[#EAEFE7] rounded-xl self-start md:self-auto overflow-x-auto max-w-full">
-          {(['Todos', 1, 2, 3] as const).map((ano) => {
-            const active = yearFilter === ano;
-            return (
-              <button
-                key={String(ano)}
-                type="button"
-                onClick={() => restartQuiz(ano)}
-                className={`min-h-[38px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  active
-                    ? 'bg-white text-[#1A241B] shadow-sm'
-                    : 'text-[#525B50] hover:text-[#1A241B]'
-                }`}
-              >
-                {ano === 'Todos' ? 'Simulado Geral' : `${ano}º Ano`}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Year Filter Segmented Control */}
+          <div className="flex items-center gap-1 p-1 bg-[#EAEFE7] rounded-xl overflow-x-auto max-w-full">
+            {(['Todos', 1, 2, 3] as const).map((ano) => {
+              const active = yearFilter === ano;
+              return (
+                <button
+                  key={String(ano)}
+                  type="button"
+                  onClick={() => restartQuiz(ano)}
+                  className={`min-h-[38px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    active
+                      ? 'bg-white text-[#1A241B] shadow-sm'
+                      : 'text-[#525B50] hover:text-[#1A241B]'
+                  }`}
+                >
+                  {ano === 'Todos' ? 'Simulado Geral' : `${ano}º Ano`}
+                </button>
+              );
+            })}
+          </div>
+
+          {onCreateQuestion && (
+            <button
+              type="button"
+              onClick={onCreateQuestion}
+              className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-xl bg-[#EAF6EE] hover:bg-[#D5EEDF] text-xs font-semibold text-[#106134] cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Nova Questão</span>
+            </button>
+          )}
         </div>
       </div>
 

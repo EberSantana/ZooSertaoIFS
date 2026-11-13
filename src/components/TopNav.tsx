@@ -1,7 +1,7 @@
 import React from 'react';
 import { PWAInstallButton } from './PWAInstallUI';
 
-export type AppTab = 'inicio' | 'flashcards' | 'quiz' | 'ludico' | 'ppc';
+export type AppTab = 'inicio' | 'flashcards' | 'quiz' | 'ludico' | 'ppc' | 'criar';
 
 interface TopNavProps {
   activeTab: AppTab;
@@ -15,6 +15,7 @@ const NAV_ITEMS: Array<{ id: AppTab; label: string }> = [
   { id: 'quiz', label: 'Quiz' },
   { id: 'ludico', label: 'Lúdico' },
   { id: 'ppc', label: 'Matriz PPC' },
+  { id: 'criar', label: 'Criar' },
 ];
 
 export const TopNav: React.FC<TopNavProps> = ({

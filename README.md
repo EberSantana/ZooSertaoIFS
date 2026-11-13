@@ -58,7 +58,12 @@ O **ZooSertão IFS** transforma a matriz curricular do curso integrado em uma jo
 
 ### 5. Explorador da Matriz PPC (`Matriz PPC`)
 - Consulta completa das **44 disciplinas obrigatórias** com filtros por **Ano**, **Núcleo** (*Básico*, *Tecnológico* e *Articulador*) e busca textual.
-- Modal detalhado exibindo carga horária em horas e total de aulas (teóricas e práticas), ementa, ênfase tecnológica e integração interdisciplinar.
+- Modal detalhado exibindo carga horária em horas e total de aulas (teóricas e práticas), ementa, ênfase tecnológica, integração interdisciplinar, além de abas para **Assuntos & Materiais** e **Atividades** da disciplina.
+
+### 6. Estúdio de Conteúdo e Uploads (`Criar`)
+- Cadastro manual de **novos assuntos, roteiros práticos e materiais** vinculados a qualquer disciplina do PPC, com recompensa em XP ao concluir.
+- **Upload direto no navegador** de arquivos **`.pdf`**, **`.xls` / `.xlsx`** e **`.docx`** (com armazenamento offline em `IndexedDB`, leitura de texto/tabelas integrada e download do arquivo original).
+- Criação manual ou **importação em lote por planilha/texto** de novos **Flashcards**, **Questões de Quiz** e **Atividades Lúdicas** (*Conexão Zootécnica* e *Classificador do Campus*), incluindo download de planilhas modelo (`.xlsx`) e exportação/importação de pacotes (`.json`).
 
 ---
 
@@ -80,7 +85,8 @@ O aplicativo foi configurado com **Progressive Web App (PWA)** via `vite-plugin-
 | Estilização | [Tailwind CSS v4](https://tailwindcss.com/) |
 | Ícones & Animações | [Lucide React](https://lucide.dev/) + [Motion](https://motion.dev/) |
 | Build & Empacotamento | [Vite](https://vite.dev/) |
-| PWA & Offline | [vite-plugin-pwa](https://vite-plugin-pwa.netlify.app/) (Workbox) |
+| PWA & Offline | [vite-plugin-pwa](https://vite-plugin-pwa.netlify.app/) (Workbox) + `IndexedDB` |
+| Leitura de Documentos | [`pdfjs-dist`](https://mozilla.github.io/pdf.js/) (PDF), [`xlsx`](https://sheetjs.com/) (XLS/XLSX) e [`mammoth`](https://github.com/mwilliamson/mammoth.js) (DOCX) |
 | Testes Unitários | `node:test` executado via [`tsx`](https://tsx.is/) |
 | CI/CD | GitHub Actions (`deploy-pages.yml`) |
 
@@ -101,23 +107,28 @@ O aplicativo foi configurado com **Progressive Web App (PWA)** via `vite-plugin-
 │   └── pwa-maskable-512x512.png # Ícone PWA adaptável (safe zone)
 ├── src/
 │   ├── components/
-│   │   ├── DashboardView.tsx    # Painel inicial, níveis, plantel e atalhos
-│   │   ├── FlashcardsView.tsx   # Revisão espaçada 3D
-│   │   ├── LudicHubView.tsx     # Jogos educativos e simulador do semiárido
-│   │   ├── MobileBottomNav.tsx  # Navegação inferior mobile
-│   │   ├── PpcExplorerView.tsx  # Matriz das 44 disciplinas + PPI
-│   │   ├── PWAInstallUI.tsx     # Botão de instalação e indicador offline
-│   │   ├── QuizView.tsx         # Simulado com feedback pedagógico
-│   │   └── TopNav.tsx           # Cabeçalho responsivo
+│   │   ├── AttachmentReaderModal.tsx # Leitor integrado de PDF, tabelas XLS/XLSX e texto DOCX
+│   │   ├── ContentStudioView.tsx     # Estúdio de criação manual, uploads e importação em lote
+│   │   ├── DashboardView.tsx         # Painel inicial, níveis, plantel e atalhos
+│   │   ├── FlashcardsView.tsx        # Revisão espaçada 3D
+│   │   ├── LudicHubView.tsx          # Jogos educativos e simulador do semiárido
+│   │   ├── MobileBottomNav.tsx       # Navegação inferior mobile
+│   │   ├── PpcExplorerView.tsx       # Matriz das 44 disciplinas + materiais por disciplina
+│   │   ├── PWAInstallUI.tsx          # Botão de instalação e indicador offline
+│   │   ├── QuizView.tsx              # Simulado com feedback pedagógico
+│   │   └── TopNav.tsx                # Cabeçalho responsivo
 │   ├── data/
-│   │   ├── ppcData.ts           # Dados oficiais extraídos do PPC (disciplinas, plantel, campus)
-│   │   └── studyContent.ts      # Flashcards, questões, pares, cenários e classificações
+│   │   ├── ppcData.ts                # Dados oficiais extraídos do PPC (disciplinas, plantel, campus)
+│   │   └── studyContent.ts           # Flashcards, questões, pares, cenários e classificações
 │   ├── hooks/
-│   │   ├── useOnlineStatus.ts   # Detecção de conectividade
-│   │   └── usePWAInstall.ts     # Gerenciamento do prompt de instalação PWA
+│   │   ├── useOnlineStatus.ts        # Detecção de conectividade
+│   │   └── usePWAInstall.ts          # Gerenciamento do prompt de instalação PWA
 │   ├── utils/
-│   │   ├── gamification.ts      # Regras puras de XP, níveis, SM-2, medalhas e simulador
-│   │   └── gamification.test.ts # Suíte de testes unitários
+│   │   ├── customContentStore.ts     # Persistência local, IndexedDB e importadores puros
+│   │   ├── customContentStore.test.ts# Testes unitários dos parsers e pacotes JSON
+│   │   ├── fileParsers.ts            # Processamento client-side de PDF, XLS/XLSX e DOCX
+│   │   ├── gamification.ts           # Regras puras de XP, níveis, SM-2, medalhas e simulador
+│   │   └── gamification.test.ts      # Suíte de testes unitários de gamificação
 │   ├── App.tsx
 │   ├── index.css
 │   └── main.tsx
