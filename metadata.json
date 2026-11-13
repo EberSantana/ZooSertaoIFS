@@ -1,0 +1,6 @@
+{
+  "name": "ZooSertão IFS — Zootecnia Poço Redondo",
+  "description": "Ambiente de estudos gamificado do Projeto Pedagógico do Curso Técnico Integrado em Zootecnia do IFS Campus Poço Redondo (Resolução CS/IFS Nº 352/2025), com flashcards, quiz e atividades lúdicas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
