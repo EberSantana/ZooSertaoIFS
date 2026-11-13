@@ -20,7 +20,11 @@ import {
   type DisciplinaPPC,
   type NucleoFormacao,
 } from '../data/ppcData';
-import type { CustomContentState, DisciplineAttachment } from '../utils/customContentStore';
+import {
+  getDisciplineInventory,
+  type CustomContentState,
+  type DisciplineAttachment,
+} from '../utils/customContentStore';
 import { AttachmentReaderModal } from './AttachmentReaderModal';
 import type { StudioMode } from './ContentStudioView';
 import type { AppTab } from './TopNav';
@@ -31,9 +35,12 @@ interface PpcExplorerViewProps {
   onOpenStudio: (mode: StudioMode, disciplinaId: string) => void;
   onCompleteTopic: (topicId: string, xpReward: number) => void;
   onDeleteTopic: (topicId: string) => void;
+  onDeleteFlashcard: (cardId: string) => void;
+  onDeleteQuizQuestion: (questionId: string) => void;
 }
 
 type ModalTab = 'ementa' | 'assuntos' | 'atividades';
+type CoverageFilter = 'Todas' | 'ComAtividades' | 'SemAtividades';
 
 export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
   customContent,
@@ -41,19 +48,36 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
   onOpenStudio,
   onCompleteTopic,
   onDeleteTopic,
+  onDeleteFlashcard,
+  onDeleteQuizQuestion,
 }) => {
   const [yearFilter, setYearFilter] = useState<1 | 2 | 3 | 'Todos'>('Todos');
   const [nucleoFilter, setNucleoFilter] = useState<NucleoFormacao | 'Todos'>('Todos');
+  const [coverageFilter, setCoverageFilter] = useState<CoverageFilter>('Todas');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDiscipline, setSelectedDiscipline] = useState<DisciplinaPPC | null>(null);
   const [modalTab, setModalTab] = useState<ModalTab>('ementa');
   const [readingAttachment, setReadingAttachment] = useState<DisciplineAttachment | null>(null);
 
+  const inventoryById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getDisciplineInventory>>();
+    for (const d of DISCIPLINAS_PPC) {
+      map.set(d.id, getDisciplineInventory(d.id, customContent));
+    }
+    return map;
+  }, [customContent]);
+
   const filteredDisciplines = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return DISCIPLINAS_PPC.filter((d) => {
+      const inv = inventoryById.get(d.id);
       const matchYear = yearFilter === 'Todos' || d.ano === yearFilter;
       const matchNucleo = nucleoFilter === 'Todos' || d.nucleo === nucleoFilter;
+      const matchCoverage =
+        coverageFilter === 'Todas' ||
+        (coverageFilter === 'ComAtividades' && (inv?.totalActivities ?? 0) > 0) ||
+        (coverageFilter === 'SemAtividades' && (inv?.totalActivities ?? 0) === 0);
+
       const hasMatchingTopic = customContent.topics.some(
         (t) =>
           t.disciplinaId === d.id &&
@@ -65,24 +89,16 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
         d.ementa.toLowerCase().includes(query) ||
         d.enfaseTecnologica.toLowerCase().includes(query) ||
         hasMatchingTopic;
-      return matchYear && matchNucleo && matchSearch;
+      return matchYear && matchNucleo && matchCoverage && matchSearch;
     });
-  }, [yearFilter, nucleoFilter, searchQuery, customContent.topics]);
+  }, [yearFilter, nucleoFilter, coverageFilter, searchQuery, customContent.topics, inventoryById]);
 
   const openDisciplineModal = (disc: DisciplinaPPC, initialTab: ModalTab = 'ementa') => {
     setSelectedDiscipline(disc);
     setModalTab(initialTab);
   };
 
-  const selectedTopics = selectedDiscipline
-    ? customContent.topics.filter((t) => t.disciplinaId === selectedDiscipline.id)
-    : [];
-  const selectedCustomCards = selectedDiscipline
-    ? customContent.flashcards.filter((f) => f.disciplinaId === selectedDiscipline.id)
-    : [];
-  const selectedCustomQuizzes = selectedDiscipline
-    ? customContent.quizQuestions.filter((q) => q.disciplinaId === selectedDiscipline.id)
-    : [];
+  const selectedInv = selectedDiscipline ? inventoryById.get(selectedDiscipline.id) : undefined;
 
   return (
     <div className="space-y-8">
@@ -95,7 +111,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
             Matriz Curricular do PPC (44 Disciplinas + PPI)
           </h1>
           <p className="mt-1 text-sm text-[#525B50]">
-            Explore as ementas oficiais, anexe arquivos (PDF, XLS, DOCX) e crie assuntos ou atividades por disciplina.
+            Acompanhe as atividades e assuntos já lançados em cada disciplina, visualize materiais e faça novos envios.
           </p>
         </div>
 
@@ -111,7 +127,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
 
       {/* Filters */}
       <div className="bg-white border border-[#E3E7DF] rounded-2xl p-4 space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 p-1 bg-[#F1F4EE] rounded-xl">
               {(['Todos', 1, 2, 3] as const).map((ano) => (
@@ -146,9 +162,32 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                 </button>
               ))}
             </div>
+
+            <div className="flex items-center gap-1 p-1 bg-[#F1F4EE] rounded-xl">
+              {(
+                [
+                  { id: 'Todas', label: 'Todas' },
+                  { id: 'ComAtividades', label: 'Com atividades' },
+                  { id: 'SemAtividades', label: 'Sem atividades' },
+                ] as const
+              ).map((cov) => (
+                <button
+                  key={cov.id}
+                  type="button"
+                  onClick={() => setCoverageFilter(cov.id)}
+                  className={`min-h-[38px] px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    coverageFilter === cov.id
+                      ? 'bg-white text-[#1A241B] shadow-sm'
+                      : 'text-[#525B50] hover:text-[#1A241B]'
+                  }`}
+                >
+                  {cov.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="relative flex-1 lg:max-w-xs">
+          <div className="relative flex-1 xl:max-w-xs">
             <Search
               className="w-4 h-4 text-[#6A7368] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
               aria-hidden="true"
@@ -181,6 +220,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
             onClick={() => {
               setYearFilter('Todos');
               setNucleoFilter('Todos');
+              setCoverageFilter('Todas');
               setSearchQuery('');
             }}
             className="mt-4 min-h-[44px] px-5 py-2 rounded-xl bg-[#157A42] text-white text-sm font-semibold cursor-pointer"
@@ -191,14 +231,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredDisciplines.map((disc) => {
-            const discTopics = customContent.topics.filter((t) => t.disciplinaId === disc.id);
-            const discAttachmentsCount = discTopics.reduce(
-              (acc, t) => acc + t.attachments.length,
-              0
-            );
-            const discExtraActivities =
-              customContent.flashcards.filter((f) => f.disciplinaId === disc.id).length +
-              customContent.quizQuestions.filter((q) => q.disciplinaId === disc.id).length;
+            const inv = inventoryById.get(disc.id)!;
 
             return (
               <article
@@ -217,21 +250,38 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                     {disc.ementa}
                   </p>
 
-                  {(discTopics.length > 0 || discExtraActivities > 0) && (
-                    <p className="mt-3 text-xs font-mono font-semibold text-[#157A42]">
-                      {discTopics.length} assunto(s) · {discAttachmentsCount} anexo(s) ·{' '}
-                      {discExtraActivities} atividade(s)
-                    </p>
-                  )}
+                  {/* Unified Inventory Summary */}
+                  <div className="mt-3 pt-2.5 border-t border-[#F1F4EE] text-xs font-mono tabular-nums text-[#525B50]">
+                    {inv.totalActivities > 0 ? (
+                      <span className="text-[#157A42] font-semibold">
+                        Assuntos: {inv.topics.length} ({inv.attachmentsCount} arq.) · Cards:{' '}
+                        {inv.totalFlashcards} · Quiz: {inv.totalQuizQuestions}
+                        {inv.totalLudic > 0 ? ` · Lúdico: ${inv.totalLudic}` : ''}
+                      </span>
+                    ) : (
+                      <span>Nenhuma atividade lançada ainda</span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-[#EEF1EB] flex items-center justify-between gap-2">
+                <div className="mt-4 pt-3 border-t border-[#EEF1EB] flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => openDisciplineModal(disc, discTopics.length > 0 ? 'assuntos' : 'ementa')}
+                    onClick={() =>
+                      openDisciplineModal(
+                        disc,
+                        inv.topics.length > 0
+                          ? 'assuntos'
+                          : inv.totalActivities > 0
+                          ? 'atividades'
+                          : 'ementa'
+                      )
+                    }
                     className="min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold text-[#157A42] hover:bg-[#EAF6EE] transition-colors cursor-pointer"
                   >
-                    {discTopics.length > 0 ? `Materiais (${discTopics.length})` : 'Ver ementa'}
+                    {inv.totalActivities > 0
+                      ? `Ver atividades (${inv.totalActivities})`
+                      : 'Ver ementa'}
                   </button>
                   <button
                     type="button"
@@ -239,7 +289,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                     className="inline-flex items-center gap-1 min-h-[40px] px-3 py-1.5 rounded-lg bg-[#F1F4EE] hover:bg-[#E4EAE0] text-xs font-semibold text-[#1A241B] transition-colors cursor-pointer whitespace-nowrap"
                   >
                     <Plus className="w-3.5 h-3.5 text-[#157A42]" aria-hidden="true" />
-                    <span>Assunto / Upload</span>
+                    <span>Lançar / Upload</span>
                   </button>
                 </div>
               </article>
@@ -287,7 +337,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
       </section>
 
       {/* Discipline Detail Modal */}
-      {selectedDiscipline && (
+      {selectedDiscipline && selectedInv && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           role="dialog"
@@ -340,7 +390,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                     : 'text-[#525B50] hover:text-[#1A241B]'
                 }`}
               >
-                Assuntos & Materiais ({selectedTopics.length})
+                Assuntos & Materiais ({selectedInv.topics.length})
               </button>
               <button
                 type="button"
@@ -351,7 +401,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                     : 'text-[#525B50] hover:text-[#1A241B]'
                 }`}
               >
-                Atividades ({selectedCustomCards.length + selectedCustomQuizzes.length})
+                Atividades ({selectedInv.totalFlashcards + selectedInv.totalQuizQuestions + selectedInv.totalLudic})
               </button>
             </div>
 
@@ -406,13 +456,13 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                   </button>
                 </div>
 
-                {selectedTopics.length === 0 ? (
+                {selectedInv.topics.length === 0 ? (
                   <p className="py-6 text-sm text-[#525B50] border-t border-[#EEF1EB]">
                     Ainda não há assuntos extras ou arquivos enviados nesta disciplina.
                   </p>
                 ) : (
                   <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB]">
-                    {selectedTopics.map((topic) => {
+                    {selectedInv.topics.map((topic) => {
                       const isDone = customContent.completedTopicIds.includes(topic.id);
                       return (
                         <li key={topic.id} className="py-4 space-y-2.5">
@@ -481,7 +531,7 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
             )}
 
             {modalTab === 'atividades' && (
-              <div className="mt-6 space-y-4">
+              <div className="mt-6 space-y-5">
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -521,26 +571,100 @@ export const PpcExplorerView: React.FC<PpcExplorerViewProps> = ({
                   </button>
                 </div>
 
-                {selectedCustomCards.length === 0 && selectedCustomQuizzes.length === 0 ? (
-                  <p className="py-6 text-sm text-[#525B50] border-t border-[#EEF1EB]">
-                    Nenhuma atividade personalizada cadastrada especificamente para esta disciplina ainda.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB]">
-                    {selectedCustomCards.map((fc) => (
-                      <li key={fc.id} className="py-3">
-                        <p className="text-[11px] font-mono text-[#157A42]">Flashcard</p>
-                        <p className="text-sm font-semibold text-[#1A241B]">{fc.frente}</p>
-                      </li>
-                    ))}
-                    {selectedCustomQuizzes.map((qz) => (
-                      <li key={qz.id} className="py-3">
-                        <p className="text-[11px] font-mono text-[#B86A0A]">Questão Quiz</p>
-                        <p className="text-sm font-semibold text-[#1A241B]">{qz.enunciado}</p>
-                      </li>
-                    ))}
-                  </ul>
+                {/* Custom Teacher-Added Activities */}
+                {(selectedInv.customFlashcards.length > 0 ||
+                  selectedInv.customQuizQuestions.length > 0 ||
+                  selectedInv.customMatchDecks.length > 0 ||
+                  selectedInv.customClassifierItems.length > 0) && (
+                  <div className="pt-4 border-t border-[#EEF1EB] space-y-2">
+                    <h3 className="text-xs font-semibold text-[#157A42] uppercase tracking-wider">
+                      Lançadas pelo Professor ({selectedInv.customFlashcards.length + selectedInv.customQuizQuestions.length + selectedInv.totalLudic})
+                    </h3>
+                    <ul className="divide-y divide-[#EEF1EB]">
+                      {selectedInv.customFlashcards.map((fc) => (
+                        <li key={fc.id} className="py-2.5 flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-[11px] font-mono text-[#157A42]">Flashcard · Professor</p>
+                            <p className="text-sm font-semibold text-[#1A241B]">{fc.frente}</p>
+                            <p className="text-xs text-[#4C564A] mt-0.5">{fc.verso}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteFlashcard(fc.id)}
+                            aria-label="Excluir flashcard"
+                            className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[#6A7368] hover:text-[#991B1B] cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </li>
+                      ))}
+                      {selectedInv.customQuizQuestions.map((qz) => (
+                        <li key={qz.id} className="py-2.5 flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-[11px] font-mono text-[#B86A0A]">Questão Quiz · Professor</p>
+                            <p className="text-sm font-semibold text-[#1A241B]">{qz.enunciado}</p>
+                            <p className="text-xs text-[#4C564A] mt-0.5">
+                              Gabarito: {['A', 'B', 'C', 'D'][qz.correta]} — {qz.alternativas[qz.correta]}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteQuizQuestion(qz.id)}
+                            aria-label="Excluir questão"
+                            className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[#6A7368] hover:text-[#991B1B] cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </li>
+                      ))}
+                      {selectedInv.customMatchDecks.map((md) => (
+                        <li key={md.id} className="py-2.5">
+                          <p className="text-[11px] font-mono text-[#157A42]">Conexão Zootécnica · {md.pares.length} pares</p>
+                          <p className="text-sm font-semibold text-[#1A241B]">{md.titulo}</p>
+                        </li>
+                      ))}
+                      {selectedInv.customClassifierItems.map((ci) => (
+                        <li key={ci.id} className="py-2.5">
+                          <p className="text-[11px] font-mono text-[#B86A0A]">Classificador · {ci.categoriaCorreta}</p>
+                          <p className="text-sm font-semibold text-[#1A241B]">{ci.item}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
+
+                {/* Built-in PPC Activities already in this discipline */}
+                <div className="pt-4 border-t border-[#EEF1EB] space-y-2">
+                  <h3 className="text-xs font-semibold text-[#525B50] uppercase tracking-wider">
+                    Atividades Oficiais do PPC já existentes ({selectedInv.builtInFlashcards.length + selectedInv.builtInQuizQuestions.length})
+                  </h3>
+
+                  {selectedInv.builtInFlashcards.length === 0 &&
+                  selectedInv.builtInQuizQuestions.length === 0 ? (
+                    <p className="py-3 text-sm text-[#525B50]">
+                      Esta disciplina ainda não possui flashcards ou questões pré-cadastradas do PPC. Use os botões acima para lançar novas atividades.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-[#EEF1EB]">
+                      {selectedInv.builtInFlashcards.map((fc) => (
+                        <li key={fc.id} className="py-2.5">
+                          <p className="text-[11px] font-mono text-[#157A42]">Flashcard · Base PPC</p>
+                          <p className="text-sm font-semibold text-[#1A241B]">{fc.frente}</p>
+                          <p className="text-xs text-[#4C564A] mt-0.5 line-clamp-2">{fc.verso}</p>
+                        </li>
+                      ))}
+                      {selectedInv.builtInQuizQuestions.map((qz) => (
+                        <li key={qz.id} className="py-2.5">
+                          <p className="text-[11px] font-mono text-[#B86A0A]">Questão Quiz · Base PPC</p>
+                          <p className="text-sm font-semibold text-[#1A241B]">{qz.enunciado}</p>
+                          <p className="text-xs text-[#4C564A] mt-0.5">
+                            Gabarito: {['A', 'B', 'C', 'D'][qz.correta]} — {qz.alternativas[qz.correta]}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             )}
 

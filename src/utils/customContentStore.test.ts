@@ -4,6 +4,7 @@ import {
   detectFileFormat,
   exportCustomContentBundle,
   formatFileSize,
+  getDisciplineInventory,
   importCustomContentBundle,
   INITIAL_CUSTOM_CONTENT,
   parseSpreadsheetRowsToFlashcards,
@@ -90,3 +91,47 @@ test('exportCustomContentBundle and importCustomContentBundle round-trip and rej
 
   assert.throws(() => importCustomContentBundle('{"foo":"bar"}'), /inválido/i);
 });
+
+test('getDisciplineInventory aggregates built-in PPC and custom activities per discipline', () => {
+  const customState = {
+    ...INITIAL_CUSTOM_CONTENT,
+    topics: [
+      {
+        id: 'top-1',
+        disciplinaId: 'zootecnia-geral-1',
+        disciplinaNome: 'Zootecnia Geral',
+        ano: 1 as const,
+        nucleo: 'Tecnológico' as const,
+        titulo: 'Introdução ao Semiárido',
+        tipo: 'assunto' as const,
+        descricao: 'Resumo',
+        xpReward: 25,
+        attachments: [],
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    flashcards: [
+      {
+        id: 'custom-fc-1',
+        ano: 1 as const,
+        nucleo: 'Tecnológico' as const,
+        disciplinaId: 'zootecnia-geral-1',
+        disciplinaNome: 'Zootecnia Geral',
+        frente: 'Frente teste',
+        verso: 'Verso teste',
+        contextoSertao: 'Campus',
+      },
+    ],
+  };
+
+  const zooInv = getDisciplineInventory('zootecnia-geral-1', customState);
+  assert.equal(zooInv.topics.length, 1);
+  assert.ok(zooInv.builtInFlashcards.length >= 2);
+  assert.equal(zooInv.customFlashcards.length, 1);
+  assert.equal(zooInv.totalFlashcards, zooInv.builtInFlashcards.length + 1);
+  assert.ok(zooInv.builtInQuizQuestions.length >= 1);
+
+  const arteInv = getDisciplineInventory('arte-1', INITIAL_CUSTOM_CONTENT);
+  assert.equal(arteInv.totalActivities, 0);
+});
+

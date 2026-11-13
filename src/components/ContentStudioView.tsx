@@ -10,16 +10,24 @@ import {
   Layers,
   ListChecks,
   Plus,
+  Search,
   Trash2,
   Upload,
 } from 'lucide-react';
 import { DISCIPLINAS_PPC, type DisciplinaPPC } from '../data/ppcData';
-import type { ClassifierItem, FlashcardItem, MatchDeck, QuizQuestion } from '../data/studyContent';
+import {
+  MATCH_DECKS,
+  type ClassifierItem,
+  type FlashcardItem,
+  type MatchDeck,
+  type QuizQuestion,
+} from '../data/studyContent';
 import {
   createCustomId,
   deleteFileBlob,
   exportCustomContentBundle,
   formatFileSize,
+  getDisciplineInventory,
   importCustomContentBundle,
   parseSpreadsheetRowsToFlashcards,
   parseSpreadsheetRowsToQuiz,
@@ -61,6 +69,8 @@ const CAMPUS_CATEGORIES: ClassifierItem['categoriaCorreta'][] = [
   'Gestão & Extensão',
 ];
 
+type DisciplineCoverageFilter = 'Todas' | 'ComAtividades' | 'SemAtividades';
+
 export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
   customContent,
   initialDisciplineId,
@@ -79,15 +89,17 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
 }) => {
   const [mode, setMode] = useState<StudioMode>(initialMode);
   const [selectedYear, setSelectedYear] = useState<1 | 2 | 3 | 'Todos'>('Todos');
+  const [coverageFilter, setCoverageFilter] = useState<DisciplineCoverageFilter>('Todas');
+  const [discSearch, setDiscSearch] = useState('');
   const [selectedDiscId, setSelectedDiscId] = useState<string>(
     initialDisciplineId || DISCIPLINAS_PPC[0].id
   );
+  const [listScope, setListScope] = useState<'disciplina' | 'curso'>('disciplina');
   const [statusBanner, setStatusBanner] = useState<{ kind: 'ok' | 'err'; text: string } | null>(
     null
   );
   const [previewAttachment, setPreviewAttachment] = useState<DisciplineAttachment | null>(null);
 
-  // Sync incoming discipline/mode props when navigated from another view
   React.useEffect(() => {
     if (initialDisciplineId) {
       setSelectedDiscId(initialDisciplineId);
@@ -100,10 +112,27 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
     setMode(initialMode);
   }, [initialMode]);
 
+  const inventoryById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getDisciplineInventory>>();
+    for (const d of DISCIPLINAS_PPC) {
+      map.set(d.id, getDisciplineInventory(d.id, customContent));
+    }
+    return map;
+  }, [customContent]);
+
   const filteredDisciplines = useMemo(() => {
-    if (selectedYear === 'Todos') return DISCIPLINAS_PPC;
-    return DISCIPLINAS_PPC.filter((d) => d.ano === selectedYear);
-  }, [selectedYear]);
+    const q = discSearch.trim().toLowerCase();
+    return DISCIPLINAS_PPC.filter((d) => {
+      const inv = inventoryById.get(d.id);
+      const matchYear = selectedYear === 'Todos' || d.ano === selectedYear;
+      const matchCov =
+        coverageFilter === 'Todas' ||
+        (coverageFilter === 'ComAtividades' && (inv?.totalActivities ?? 0) > 0) ||
+        (coverageFilter === 'SemAtividades' && (inv?.totalActivities ?? 0) === 0);
+      const matchSearch = !q || d.nome.toLowerCase().includes(q);
+      return matchYear && matchCov && matchSearch;
+    });
+  }, [selectedYear, coverageFilter, discSearch, inventoryById]);
 
   const activeDiscipline: DisciplinaPPC = useMemo(() => {
     return (
@@ -112,6 +141,8 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
       DISCIPLINAS_PPC[0]
     );
   }, [selectedDiscId, filteredDisciplines]);
+
+  const activeInv = inventoryById.get(activeDiscipline.id) || getDisciplineInventory(activeDiscipline.id, customContent);
 
   // =================== FORM 1: ASSUNTO & UPLOAD ===================
   const [topicType, setTopicType] = useState<CustomTopicType>('assunto');
@@ -148,7 +179,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
 
       setStatusBanner({
         kind: 'ok',
-        text: `${processed.length} arquivo(s) processado(s) com sucesso (PDF/XLS/DOCX). Revise e salve o assunto.`,
+        text: `${processed.length} arquivo(s) processado(s) com sucesso (PDF/XLS/DOCX). Revise e clique em Salvar Assunto na Disciplina.`,
       });
     } catch (err) {
       setStatusBanner({
@@ -404,6 +435,8 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
       subtitulo:
         deckSubtitulo.trim() || `${activeDiscipline.nome} (${activeDiscipline.ano}º Ano)`,
       ano: activeDiscipline.ano,
+      disciplinaId: activeDiscipline.id,
+      disciplinaNome: activeDiscipline.nome,
       pares: validPairs,
     };
 
@@ -417,7 +450,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
     ]);
     setStatusBanner({
       kind: 'ok',
-      text: `Tabuleiro "${deck.titulo}" publicado na aba Lúdico → Conexão Zootécnica!`,
+      text: `Tabuleiro "${deck.titulo}" publicado em ${activeDiscipline.nome} e na aba Lúdico!`,
     });
   };
 
@@ -434,6 +467,8 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
       detalhe:
         clsDetalhe.trim() ||
         `Atividade vinculada a ${activeDiscipline.nome} (${activeDiscipline.ano}º Ano).`,
+      disciplinaId: activeDiscipline.id,
+      disciplinaNome: activeDiscipline.nome,
       categoriaCorreta: clsCategoria,
     };
 
@@ -442,7 +477,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
     setClsDetalhe('');
     setStatusBanner({
       kind: 'ok',
-      text: `Item adicionado ao Classificador do Campus na aba Lúdico!`,
+      text: `Item adicionado em ${activeDiscipline.nome} e no Classificador do Campus!`,
     });
   };
 
@@ -480,24 +515,32 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
     }
   };
 
-  const disciplineTopics = customContent.topics.filter(
-    (t) => t.disciplinaId === activeDiscipline.id
-  );
+  const displayedTopics =
+    listScope === 'disciplina' ? activeInv.topics : customContent.topics;
+  const displayedCustomFlashcards =
+    listScope === 'disciplina' ? activeInv.customFlashcards : customContent.flashcards;
+  const displayedCustomQuiz =
+    listScope === 'disciplina' ? activeInv.customQuizQuestions : customContent.quizQuestions;
+  const displayedCustomDecks =
+    listScope === 'disciplina' ? activeInv.customMatchDecks : customContent.matchDecks;
+  const displayedCustomClassifier =
+    listScope === 'disciplina'
+      ? activeInv.customClassifierItems
+      : customContent.classifierItems;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium text-[#525B50]">
-            Gestão Pedagógica do Docente e Discente · Armazenamento Local Offline
+            Painel Docente & Discente · Controle das 44 Disciplinas do PPC
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-[#1A241B]">
-            Inserir Assuntos, Uploads e Atividades
+            Lançar Assuntos, Uploads e Atividades
           </h1>
           <p className="mt-1 text-sm text-[#525B50]">
-            Adicione novos assuntos, envie apostilas e planilhas em{' '}
-            <strong className="text-[#1A241B]">PDF, XLS/XLSX e DOCX</strong> nas disciplinas e crie atividades gamificadas.
+            Escolha a disciplina diretamente abaixo para ver o que já existe nela e submeter novos assuntos (PDF, XLS, DOCX) ou atividades.
           </p>
         </div>
 
@@ -553,72 +596,136 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
         </div>
       )}
 
-      {/* Target Discipline Selector */}
+      {/* 1. Visible Discipline Selector + Inventory Overview */}
       <section className="bg-white border border-[#E3E7DF] rounded-2xl p-5 sm:p-6 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-[#1A241B]">
-              1. Escolha a Disciplina do PPC
+            <h2 className="text-base font-bold text-[#1A241B]">
+              1. Escolha a Disciplina para Submissão ({filteredDisciplines.length} exibidas)
             </h2>
             <p className="text-xs text-[#525B50]">
-              Todo assunto, arquivo ou atividade criada será vinculada à disciplina selecionada.
+              Clique na disciplina desejada para ver tudo que já foi lançado e enviar novos conteúdos.
             </p>
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-[#F1F4EE] rounded-xl self-start md:self-auto">
-            {(['Todos', 1, 2, 3] as const).map((ano) => (
-              <button
-                key={String(ano)}
-                type="button"
-                onClick={() => {
-                  setSelectedYear(ano);
-                  if (ano !== 'Todos') {
-                    const firstInYear = DISCIPLINAS_PPC.find((d) => d.ano === ano);
-                    if (firstInYear && activeDiscipline.ano !== ano) {
-                      setSelectedDiscId(firstInYear.id);
-                    }
-                  }
-                }}
-                className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-                  selectedYear === ano
-                    ? 'bg-white text-[#1A241B] shadow-sm'
-                    : 'text-[#525B50] hover:text-[#1A241B]'
-                }`}
-              >
-                {ano === 'Todos' ? 'Todos Anos' : `${ano}º Ano`}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 p-1 bg-[#F1F4EE] rounded-xl">
+              {(['Todos', 1, 2, 3] as const).map((ano) => (
+                <button
+                  key={String(ano)}
+                  type="button"
+                  onClick={() => setSelectedYear(ano)}
+                  className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                    selectedYear === ano
+                      ? 'bg-white text-[#1A241B] shadow-sm'
+                      : 'text-[#525B50] hover:text-[#1A241B]'
+                  }`}
+                >
+                  {ano === 'Todos' ? 'Todos Anos' : `${ano}º Ano`}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1 p-1 bg-[#F1F4EE] rounded-xl">
+              {(
+                [
+                  { id: 'Todas', label: 'Todas' },
+                  { id: 'ComAtividades', label: 'Com atividades' },
+                  { id: 'SemAtividades', label: 'Pendentes' },
+                ] as const
+              ).map((cov) => (
+                <button
+                  key={cov.id}
+                  type="button"
+                  onClick={() => setCoverageFilter(cov.id)}
+                  className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                    coverageFilter === cov.id
+                      ? 'bg-white text-[#1A241B] shadow-sm'
+                      : 'text-[#525B50] hover:text-[#1A241B]'
+                  }`}
+                >
+                  {cov.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <Search
+                className="w-3.5 h-3.5 text-[#6A7368] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={discSearch}
+                onChange={(e) => setDiscSearch(e.target.value)}
+                placeholder="Filtrar disciplina..."
+                aria-label="Filtrar disciplina para lançamento"
+                className="min-h-[38px] w-48 sm:w-56 pl-8 pr-3 py-1.5 rounded-xl border border-[#DCE2D7] bg-white text-xs text-[#1A241B] placeholder:text-[#7C857A] focus-visible:outline-2 focus-visible:outline-[#157A42]"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-          <div className="md:col-span-7">
-            <label htmlFor="studio-discipline-select" className="sr-only">
-              Disciplina do PPC
-            </label>
-            <select
-              id="studio-discipline-select"
-              value={activeDiscipline.id}
-              onChange={(e) => setSelectedDiscId(e.target.value)}
-              className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#DCE2D7] bg-white text-sm font-medium text-[#1A241B] focus-visible:outline-2 focus-visible:outline-[#157A42]"
-            >
-              {filteredDisciplines.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.ano}º Ano · {d.nome} ({d.nucleo})
-                </option>
-              ))}
-            </select>
+        {/* Interactive Discipline Selection Grid */}
+        {filteredDisciplines.length === 0 ? (
+          <p className="py-4 text-sm text-[#525B50]">
+            Nenhuma disciplina encontrada para este filtro.
+          </p>
+        ) : (
+          <div
+            role="listbox"
+            aria-label="Disciplinas disponíveis para submissão"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[260px] overflow-y-auto pr-1"
+          >
+            {filteredDisciplines.map((d) => {
+              const inv = inventoryById.get(d.id)!;
+              const isSelected = d.id === activeDiscipline.id;
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => setSelectedDiscId(d.id)}
+                  className={`text-left p-3.5 rounded-xl border transition-colors cursor-pointer flex flex-col justify-between gap-1.5 ${
+                    isSelected
+                      ? 'border-[#157A42] bg-[#EAF6EE] ring-1 ring-[#157A42]'
+                      : 'border-[#DCE2D7] bg-white hover:bg-[#F7F8F5]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-[#525B50]">
+                    <span>
+                      {d.ano}º Ano · {d.nucleo}
+                    </span>
+                    {isSelected && (
+                      <span className="font-mono font-bold text-[#157A42]">Selecionada</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-[#1A241B] leading-snug">{d.nome}</p>
+                  <p className="text-[11px] font-mono tabular-nums text-[#4C564A]">
+                    Assuntos: {inv.topics.length} ({inv.attachmentsCount} arq.) · Cards:{' '}
+                    {inv.totalFlashcards} · Quiz: {inv.totalQuizQuestions}
+                    {inv.totalLudic > 0 ? ` · Lúdico: ${inv.totalLudic}` : ''}
+                  </p>
+                </button>
+              );
+            })}
           </div>
+        )}
 
-          <div className="md:col-span-5 text-xs text-[#525B50] flex flex-wrap items-center gap-3">
-            <span>
-              Carga: <strong className="font-mono text-[#1A241B]">{activeDiscipline.cargaHoraria}h</strong>
-            </span>
-            <span>·</span>
-            <span>
-              Assuntos extras:{' '}
-              <strong className="font-mono text-[#157A42]">{disciplineTopics.length}</strong>
-            </span>
+        {/* Active Discipline Summary Strip */}
+        <div className="pt-3 border-t border-[#EEF1EB] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div className="text-[#1A241B]">
+            <span className="text-[#525B50]">Submetendo em: </span>
+            <strong>
+              {activeDiscipline.ano}º Ano · {activeDiscipline.nome}
+            </strong>{' '}
+            <span className="font-mono text-[#525B50]">({activeDiscipline.cargaHoraria}h)</span>
+          </div>
+          <div className="font-mono tabular-nums font-semibold text-[#157A42]">
+            Já existentes: {activeInv.topics.length} assunto(s) · {activeInv.totalFlashcards}{' '}
+            flashcard(s) · {activeInv.totalQuizQuestions} questão(ões) · {activeInv.totalLudic}{' '}
+            lúdica(s)
           </div>
         </div>
       </section>
@@ -679,7 +786,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
           >
             <div>
               <h2 className="text-lg font-bold text-[#1A241B]">
-                Cadastrar Assunto ou Atividade em {activeDiscipline.nome}
+                Submeter Assunto ou Material em {activeDiscipline.nome}
               </h2>
               <p className="text-xs text-[#525B50] mt-0.5">
                 Escreva manualmente e/ou anexe arquivos PDF, XLS, XLSX ou DOCX.
@@ -851,29 +958,35 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
             </button>
           </form>
 
-          {/* Existing Topics for Selected Discipline */}
+          {/* Existing Topics Control Panel */}
           <div className="lg:col-span-5 bg-white border border-[#E3E7DF] rounded-2xl p-6 space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-[#1A241B]">
-                Assuntos em {activeDiscipline.nome}
-              </h3>
-              <p className="text-xs text-[#525B50]">
-                {disciplineTopics.length} registro(s) nesta disciplina ·{' '}
-                {customContent.topics.length} no curso todo
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-[#1A241B]">
+                  {listScope === 'disciplina'
+                    ? `Já lançado em ${activeDiscipline.nome}`
+                    : 'Todos os Assuntos Lançados'}
+                </h3>
+                <p className="text-xs text-[#525B50]">
+                  {displayedTopics.length} assunto(s) · {activeInv.totalFlashcards} card(s) ·{' '}
+                  {activeInv.totalQuizQuestions} questão(ões) nesta disciplina
+                </p>
+              </div>
+              <ScopeToggle value={listScope} onChange={setListScope} />
             </div>
 
-            {disciplineTopics.length === 0 ? (
+            {displayedTopics.length === 0 ? (
               <p className="py-6 text-sm text-[#525B50] border-t border-[#EEF1EB]">
-                Nenhum assunto extra adicionado nesta disciplina ainda. Use o formulário ao lado para inserir aulas, roteiros ou enviar arquivos PDF, XLS e DOCX.
+                Nenhum assunto extra lançado {listScope === 'disciplina' ? 'nesta disciplina' : 'no curso'} ainda.
               </p>
             ) : (
-              <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB]">
-                {disciplineTopics.map((topic) => (
+              <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB] max-h-[540px] overflow-y-auto">
+                {displayedTopics.map((topic) => (
                   <li key={topic.id} className="py-4 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className="text-[11px] font-mono uppercase font-semibold text-[#157A42]">
+                          {listScope === 'curso' ? `${topic.disciplinaNome} · ` : ''}
                           {topic.tipo} · +{topic.xpReward} XP
                         </span>
                         <h4 className="text-sm font-bold text-[#1A241B]">{topic.titulo}</h4>
@@ -926,15 +1039,13 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
             onSubmit={handleSaveFlashcard}
             className="lg:col-span-7 bg-white border border-[#E3E7DF] rounded-2xl p-6 space-y-5"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-[#1A241B]">
-                  Criar Flashcard em {activeDiscipline.nome}
-                </h2>
-                <p className="text-xs text-[#525B50] mt-0.5">
-                  O cartão entra automaticamente no baralho de revisão espaçada do {activeDiscipline.ano}º Ano.
-                </p>
-              </div>
+            <div>
+              <h2 className="text-lg font-bold text-[#1A241B]">
+                Criar Flashcard em {activeDiscipline.nome}
+              </h2>
+              <p className="text-xs text-[#525B50] mt-0.5">
+                O cartão entra automaticamente no baralho de revisão espaçada do {activeDiscipline.ano}º Ano.
+              </p>
             </div>
 
             <div>
@@ -983,7 +1094,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
               type="submit"
               className="w-full min-h-[48px] rounded-xl bg-[#157A42] hover:bg-[#106134] text-white text-sm font-semibold cursor-pointer"
             >
-              Salvar Flashcard
+              Submeter Flashcard para {activeDiscipline.nome}
             </button>
 
             {/* Batch import via XLS/PDF/DOCX */}
@@ -1025,28 +1136,34 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
             </div>
           </form>
 
-          {/* List of Custom Flashcards */}
+          {/* Flashcards Control Panel (Custom + Built-in PPC) */}
           <div className="lg:col-span-5 bg-white border border-[#E3E7DF] rounded-2xl p-6 space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-[#1A241B]">
-                Flashcards Adicionados ({customContent.flashcards.length})
-              </h3>
-              <p className="text-xs text-[#525B50]">
-                Todos os cartões abaixo já aparecem na aba Flashcards.
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-[#1A241B]">
+                  Flashcards Existentes ({listScope === 'disciplina' ? activeInv.totalFlashcards : customContent.flashcards.length})
+                </h3>
+                <p className="text-xs text-[#525B50]">
+                  {listScope === 'disciplina'
+                    ? `${activeInv.customFlashcards.length} seu(s) + ${activeInv.builtInFlashcards.length} do PPC em ${activeDiscipline.nome}`
+                    : 'Todos os flashcards lançados pelo professor'}
+                </p>
+              </div>
+              <ScopeToggle value={listScope} onChange={setListScope} />
             </div>
 
-            {customContent.flashcards.length === 0 ? (
+            {displayedCustomFlashcards.length === 0 &&
+            (listScope === 'curso' || activeInv.builtInFlashcards.length === 0) ? (
               <p className="py-6 text-sm text-[#525B50] border-t border-[#EEF1EB]">
-                Nenhum flashcard personalizado cadastrado ainda.
+                Nenhum flashcard cadastrado nesta disciplina ainda.
               </p>
             ) : (
-              <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB] max-h-[520px] overflow-y-auto">
-                {customContent.flashcards.map((fc) => (
+              <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB] max-h-[540px] overflow-y-auto">
+                {displayedCustomFlashcards.map((fc) => (
                   <li key={fc.id} className="py-3.5 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-mono text-[#157A42]">
-                        {fc.ano}º Ano · {fc.disciplinaNome}
+                      <p className="text-[11px] font-mono text-[#157A42] font-semibold">
+                        Professor · {fc.ano}º Ano · {fc.disciplinaNome}
                       </p>
                       <p className="text-sm font-semibold text-[#1A241B] mt-0.5">{fc.frente}</p>
                       <p className="text-xs text-[#4C564A] mt-1 line-clamp-2">{fc.verso}</p>
@@ -1061,6 +1178,16 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
                     </button>
                   </li>
                 ))}
+                {listScope === 'disciplina' &&
+                  activeInv.builtInFlashcards.map((fc) => (
+                    <li key={fc.id} className="py-3.5">
+                      <p className="text-[11px] font-mono text-[#525B50]">
+                        Base PPC · {fc.disciplinaNome}
+                      </p>
+                      <p className="text-sm font-semibold text-[#1A241B] mt-0.5">{fc.frente}</p>
+                      <p className="text-xs text-[#4C564A] mt-1 line-clamp-2">{fc.verso}</p>
+                    </li>
+                  ))}
               </ul>
             )}
           </div>
@@ -1150,7 +1277,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
               type="submit"
               className="w-full min-h-[48px] rounded-xl bg-[#157A42] hover:bg-[#106134] text-white text-sm font-semibold cursor-pointer"
             >
-              Salvar Questão no Quiz
+              Submeter Questão para {activeDiscipline.nome}
             </button>
 
             {/* Batch XLS import */}
@@ -1192,27 +1319,34 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
             </div>
           </form>
 
+          {/* Quiz Control Panel */}
           <div className="lg:col-span-5 bg-white border border-[#E3E7DF] rounded-2xl p-6 space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-[#1A241B]">
-                Questões Adicionadas ({customContent.quizQuestions.length})
-              </h3>
-              <p className="text-xs text-[#525B50]">
-                Priorizadas nas próximas rodadas da aba Quiz.
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-[#1A241B]">
+                  Questões Existentes ({listScope === 'disciplina' ? activeInv.totalQuizQuestions : customContent.quizQuestions.length})
+                </h3>
+                <p className="text-xs text-[#525B50]">
+                  {listScope === 'disciplina'
+                    ? `${activeInv.customQuizQuestions.length} sua(s) + ${activeInv.builtInQuizQuestions.length} do PPC em ${activeDiscipline.nome}`
+                    : 'Todas as questões lançadas pelo professor'}
+                </p>
+              </div>
+              <ScopeToggle value={listScope} onChange={setListScope} />
             </div>
 
-            {customContent.quizQuestions.length === 0 ? (
+            {displayedCustomQuiz.length === 0 &&
+            (listScope === 'curso' || activeInv.builtInQuizQuestions.length === 0) ? (
               <p className="py-6 text-sm text-[#525B50] border-t border-[#EEF1EB]">
-                Nenhuma questão personalizada cadastrada ainda.
+                Nenhuma questão cadastrada nesta disciplina ainda.
               </p>
             ) : (
               <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB] max-h-[540px] overflow-y-auto">
-                {customContent.quizQuestions.map((q) => (
+                {displayedCustomQuiz.map((q) => (
                   <li key={q.id} className="py-3.5 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-mono text-[#157A42]">
-                        {q.ano}º Ano · {q.disciplinaNome}
+                      <p className="text-[11px] font-mono text-[#157A42] font-semibold">
+                        Professor · {q.ano}º Ano · {q.disciplinaNome}
                       </p>
                       <p className="text-sm font-semibold text-[#1A241B] mt-0.5">{q.enunciado}</p>
                       <p className="text-xs text-[#4C564A] mt-1">
@@ -1230,6 +1364,19 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
                     </button>
                   </li>
                 ))}
+                {listScope === 'disciplina' &&
+                  activeInv.builtInQuizQuestions.map((q) => (
+                    <li key={q.id} className="py-3.5">
+                      <p className="text-[11px] font-mono text-[#525B50]">
+                        Base PPC · {q.disciplinaNome}
+                      </p>
+                      <p className="text-sm font-semibold text-[#1A241B] mt-0.5">{q.enunciado}</p>
+                      <p className="text-xs text-[#4C564A] mt-1">
+                        Gabarito: <strong>{['A', 'B', 'C', 'D'][q.correta]}</strong> —{' '}
+                        {q.alternativas[q.correta]}
+                      </p>
+                    </li>
+                  ))}
               </ul>
             )}
           </div>
@@ -1243,10 +1390,10 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-[#1A241B]">
-                  Criar Atividade Lúdica ({activeDiscipline.nome})
+                  Criar Atividade Lúdica em {activeDiscipline.nome}
                 </h2>
                 <p className="text-xs text-[#525B50]">
-                  Novos desafios ficam jogáveis imediatamente na aba Lúdico.
+                  Novos desafios ficam vinculados à disciplina e jogáveis na aba Lúdico.
                 </p>
               </div>
 
@@ -1368,7 +1515,7 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
                   type="submit"
                   className="w-full min-h-[48px] rounded-xl bg-[#157A42] hover:bg-[#106134] text-white text-sm font-semibold cursor-pointer"
                 >
-                  Publicar Tabuleiro de Conexão
+                  Publicar Tabuleiro em {activeDiscipline.nome}
                 </button>
               </form>
             ) : (
@@ -1425,30 +1572,38 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
                   type="submit"
                   className="w-full min-h-[48px] rounded-xl bg-[#157A42] hover:bg-[#106134] text-white text-sm font-semibold cursor-pointer"
                 >
-                  Adicionar ao Classificador
+                  Adicionar ao Classificador ({activeDiscipline.nome})
                 </button>
               </form>
             )}
           </div>
 
           <div className="lg:col-span-5 bg-white border border-[#E3E7DF] rounded-2xl p-6 space-y-4">
-            <h3 className="text-lg font-bold text-[#1A241B]">
-              Atividades Lúdicas Adicionadas (
-              {customContent.matchDecks.length + customContent.classifierItems.length})
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-lg font-bold text-[#1A241B]">
+                Atividades Lúdicas (
+                {displayedCustomDecks.length + displayedCustomClassifier.length})
+              </h3>
+              <ScopeToggle value={listScope} onChange={setListScope} />
+            </div>
 
-            {customContent.matchDecks.length === 0 &&
-            customContent.classifierItems.length === 0 ? (
-              <p className="py-6 text-sm text-[#525B50] border-t border-[#EEF1EB]">
-                Nenhuma atividade lúdica personalizada criada ainda.
-              </p>
+            {displayedCustomDecks.length === 0 && displayedCustomClassifier.length === 0 ? (
+              <div className="py-4 text-sm text-[#525B50] border-t border-[#EEF1EB] space-y-2">
+                <p>
+                  Nenhuma atividade lúdica personalizada {listScope === 'disciplina' ? `em ${activeDiscipline.nome}` : 'no curso'} ainda.
+                </p>
+                <p className="text-xs text-[#6A7368]">
+                  Tabuleiros gerais já disponíveis na aba Lúdico:{' '}
+                  {MATCH_DECKS.map((m) => m.titulo).join(' · ')}.
+                </p>
+              </div>
             ) : (
               <ul className="divide-y divide-[#EEF1EB] border-t border-[#EEF1EB]">
-                {customContent.matchDecks.map((d) => (
+                {displayedCustomDecks.map((d) => (
                   <li key={d.id} className="py-3 flex items-start justify-between gap-2">
                     <div>
                       <p className="text-[11px] font-mono text-[#157A42]">
-                        Conexão · {d.pares.length} pares
+                        Conexão · {d.disciplinaNome || `${d.ano}º Ano`} · {d.pares.length} pares
                       </p>
                       <p className="text-sm font-semibold text-[#1A241B]">{d.titulo}</p>
                     </div>
@@ -1462,11 +1617,12 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
                     </button>
                   </li>
                 ))}
-                {customContent.classifierItems.map((c) => (
+                {displayedCustomClassifier.map((c) => (
                   <li key={c.id} className="py-3 flex items-start justify-between gap-2">
                     <div>
                       <p className="text-[11px] font-mono text-[#B86A0A]">
-                        Classificador · {c.categoriaCorreta}
+                        Classificador · {c.disciplinaNome ? `${c.disciplinaNome} · ` : ''}
+                        {c.categoriaCorreta}
                       </p>
                       <p className="text-sm font-semibold text-[#1A241B]">{c.item}</p>
                     </div>
@@ -1493,3 +1649,29 @@ export const ContentStudioView: React.FC<ContentStudioViewProps> = ({
     </div>
   );
 };
+
+const ScopeToggle: React.FC<{
+  value: 'disciplina' | 'curso';
+  onChange: (next: 'disciplina' | 'curso') => void;
+}> = ({ value, onChange }) => (
+  <div className="flex items-center gap-1 p-0.5 bg-[#F1F4EE] rounded-lg">
+    <button
+      type="button"
+      onClick={() => onChange('disciplina')}
+      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md cursor-pointer ${
+        value === 'disciplina' ? 'bg-white text-[#1A241B] shadow-sm' : 'text-[#525B50]'
+      }`}
+    >
+      Da disciplina
+    </button>
+    <button
+      type="button"
+      onClick={() => onChange('curso')}
+      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md cursor-pointer ${
+        value === 'curso' ? 'bg-white text-[#1A241B] shadow-sm' : 'text-[#525B50]'
+      }`}
+    >
+      Todo curso
+    </button>
+  </div>
+);

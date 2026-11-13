@@ -287,6 +287,8 @@ export default function App() {
             onOpenStudio={(mode, discId) => handleOpenStudio(mode, discId)}
             onCompleteTopic={handleCompleteTopic}
             onDeleteTopic={handleDeleteTopic}
+            onDeleteFlashcard={handleDeleteFlashcard}
+            onDeleteQuizQuestion={handleDeleteQuizQuestion}
           />
         )}
 

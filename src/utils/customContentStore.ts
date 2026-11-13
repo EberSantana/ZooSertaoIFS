@@ -1,5 +1,12 @@
 import type { NucleoFormacao } from '../data/ppcData';
-import type { ClassifierItem, FlashcardItem, MatchDeck, QuizQuestion } from '../data/studyContent';
+import {
+  FLASHCARDS_PPC,
+  QUIZ_QUESTIONS,
+  type ClassifierItem,
+  type FlashcardItem,
+  type MatchDeck,
+  type QuizQuestion,
+} from '../data/studyContent';
 
 export type AttachmentFormat = 'pdf' | 'xls' | 'xlsx' | 'docx';
 
@@ -342,6 +349,63 @@ export function importCustomContentBundle(jsonText: string): CustomContentState 
     quizQuestions: Array.isArray(d.quizQuestions) ? d.quizQuestions : [],
     matchDecks: Array.isArray(d.matchDecks) ? d.matchDecks : [],
     classifierItems: Array.isArray(d.classifierItems) ? d.classifierItems : [],
+  };
+}
+
+export interface DisciplineInventory {
+  topics: CustomTopic[];
+  attachmentsCount: number;
+  builtInFlashcards: FlashcardItem[];
+  customFlashcards: FlashcardItem[];
+  builtInQuizQuestions: QuizQuestion[];
+  customQuizQuestions: QuizQuestion[];
+  customMatchDecks: MatchDeck[];
+  customClassifierItems: ClassifierItem[];
+  totalFlashcards: number;
+  totalQuizQuestions: number;
+  totalLudic: number;
+  totalActivities: number;
+}
+
+export function getDisciplineInventory(
+  disciplinaId: string,
+  customContent: CustomContentState
+): DisciplineInventory {
+  const topics = customContent.topics.filter((t) => t.disciplinaId === disciplinaId);
+  const attachmentsCount = topics.reduce((acc, t) => acc + t.attachments.length, 0);
+  const builtInFlashcards = FLASHCARDS_PPC.filter((f) => f.disciplinaId === disciplinaId);
+  const customFlashcards = customContent.flashcards.filter(
+    (f) => f.disciplinaId === disciplinaId
+  );
+  const builtInQuizQuestions = QUIZ_QUESTIONS.filter((q) => q.disciplinaId === disciplinaId);
+  const customQuizQuestions = customContent.quizQuestions.filter(
+    (q) => q.disciplinaId === disciplinaId
+  );
+  const customMatchDecks = customContent.matchDecks.filter(
+    (m) => m.disciplinaId === disciplinaId
+  );
+  const customClassifierItems = customContent.classifierItems.filter(
+    (c) => c.disciplinaId === disciplinaId
+  );
+
+  const totalFlashcards = builtInFlashcards.length + customFlashcards.length;
+  const totalQuizQuestions = builtInQuizQuestions.length + customQuizQuestions.length;
+  const totalLudic = customMatchDecks.length + customClassifierItems.length;
+  const totalActivities = topics.length + totalFlashcards + totalQuizQuestions + totalLudic;
+
+  return {
+    topics,
+    attachmentsCount,
+    builtInFlashcards,
+    customFlashcards,
+    builtInQuizQuestions,
+    customQuizQuestions,
+    customMatchDecks,
+    customClassifierItems,
+    totalFlashcards,
+    totalQuizQuestions,
+    totalLudic,
+    totalActivities,
   };
 }
 

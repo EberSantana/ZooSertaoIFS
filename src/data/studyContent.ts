@@ -29,6 +29,8 @@ export interface MatchDeck {
   titulo: string;
   subtitulo: string;
   ano: 1 | 2 | 3 | 'Todos';
+  disciplinaId?: string;
+  disciplinaNome?: string;
   pares: Array<{
     id: string;
     termo: string;
@@ -40,6 +42,8 @@ export interface ClassifierItem {
   id: string;
   item: string;
   detalhe: string;
+  disciplinaId?: string;
+  disciplinaNome?: string;
   categoriaCorreta: 'Campo Agrostológico' | 'Aprisco & Ruminantes' | 'Monogástricos & Apoio' | 'Gestão & Extensão';
 }
 
